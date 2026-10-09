@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// Bug log, defined before anything else so startup errors are caught too.
+window.bugLog = [];
+try { window.bugLog = JSON.parse(localStorage.getItem('comm_buglog') || '[]') || []; } catch (e) {}
+window.logAction = function (msg, type) {
+  try {
+    window.bugLog.push({ ts: new Date().toISOString(), type: type || 'action', msg: String(msg) });
+    if (window.bugLog.length > 200) window.bugLog.shift();
+    localStorage.setItem('comm_buglog', JSON.stringify(window.bugLog));
+  } catch (e) {}
+};
+window.onerror = function (msg, src, line, col, err) {
+  window.logAction(msg + ' (' + (src || '').split('/').pop() + ':' + line + ')' + (err && err.stack ? '\n' + err.stack : ''), 'error');
+  var t = document.getElementById('toast');
+  if (t) { t.textContent = '⚠️ ' + msg; t.classList.add('show'); setTimeout(function () { t.classList.remove('show'); }, 5000); }
+};
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Commissioning">
+<meta name="theme-color" content="#0f3d91">
+<title>Commissioning App</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --blue:#0f3d91;--blue-light:#e6edfb;
+  --green:#057a55;--green-light:#def7ec;
+  --orange:#b45309;--orange-light:#fef3c7;
+  --red:#c81e1e;--red-light:#fde8e8;
+  --grey:#6b7280;--grey-light:#f3f4f6;
+  --border:#e5e7eb;--bg:#f6f7f9;--card:#fff;--text:#111827;
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+}
+html,body{height:100%;overflow:hidden;font-family:"DM Sans",system-ui,sans-serif;font-size:16px;background:var(--bg);color:var(--text)}
+.screen{display:none;flex-direction:column;height:100vh;height:100dvh;position:fixed;inset:0;background:var(--bg)}
+.screen.active{display:flex}
+.topbar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--blue);color:#fff;min-height:56px;flex-shrink:0;padding-top:max(10px,env(safe-area-inset-top))}
+.topbar h1{font-size:1.05rem;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .sub{font-size:.75rem;opacity:.8;font-weight:400}
+.tb-btn{width:38px;height:38px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+.bottombar{position:absolute;left:0;right:0;bottom:0;padding:12px 14px;background:#fff;border-top:1px solid var(--border);padding-bottom:max(12px,env(safe-area-inset-bottom));display:flex;gap:10px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:0 18px;height:48px;border-radius:10px;border:none;font-family:inherit;font-size:1rem;font-weight:600;cursor:pointer;width:100%}
+.btn:active{opacity:.8}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-secondary{background:var(--grey-light);color:#374151}
+.btn-danger{background:var(--red-light);color:var(--red)}
+.btn-sm{height:36px;font-size:.85rem;padding:0 12px;width:auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.card-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--grey);margin-bottom:10px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:5px}
+.form-control{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:.95rem;background:#fff;color:var(--text);outline:none}
+.form-control:focus{border-color:var(--blue)}
+textarea.form-control{min-height:70px;resize:vertical}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hint{font-size:.78rem;color:var(--grey);margin-top:4px;line-height:1.35}
+.mono{font-family:"DM Mono",monospace}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:.75rem;font-weight:600;white-space:nowrap}
+.chip-green{background:var(--green-light);color:var(--green)}
+.chip-orange{background:var(--orange-light);color:var(--orange)}
+.chip-red{background:var(--red-light);color:var(--red)}
+.chip-blue{background:var(--blue-light);color:var(--blue)}
+.chip-grey{background:var(--grey-light);color:var(--grey)}
+.list{background:#fff;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+.li{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.li:last-child{border-bottom:none}
+.li:active{background:var(--grey-light)}
+.li.disabled{opacity:.45;cursor:default}
+.li-main{flex:1;min-width:0}
+.li-title{font-weight:600;font-size:.95rem}
+.li-sub{font-size:.78rem;color:var(--grey);margin-top:2px}
+.li-no{font-family:"DM Mono",monospace;font-size:.8rem;color:var(--grey);width:22px;flex-shrink:0}
+.section-label{padding:14px 2px 6px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--grey)}
+.empty{text-align:center;padding:48px 20px;color:var(--grey)}
+.empty .icon{font-size:2.6rem;margin-bottom:10px}
+.progress{height:6px;border-radius:3px;background:var(--grey-light);overflow:hidden;margin-top:6px}
+.progress > div{height:100%;background:var(--green)}
+/* Phase tiles */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+.tile{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;box-shadow:var(--shadow);min-height:86px;display:flex;flex-direction:column}
+.tile:active{background:var(--grey-light)}
+.tile.disabled{opacity:.45;cursor:default}
+.tile .t-icon{font-size:1.3rem}
+.tile .t-title{font-weight:700;font-size:.9rem;margin-top:4px}
+.tile .t-sub{font-size:.75rem;color:var(--grey);margin-top:auto}
+/* Choice chips (plant builder) */
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{padding:9px 13px;border-radius:22px;border:1.5px solid var(--border);background:#fff;font-size:.88rem;font-weight:500;cursor:pointer;user-select:none}
+.opt.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.opt.add{border-style:dashed;color:var(--blue);font-weight:700}
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--border);background:#fff;font-size:1.3rem;font-weight:700;cursor:pointer}
+.stepper span{font-family:"DM Mono",monospace;font-size:1.3rem;min-width:28px;text-align:center}
+.q{padding:12px 0;border-bottom:1px solid var(--border)}
+.q:last-child{border-bottom:none}
+.q-label{font-weight:600;font-size:.9rem;margin-bottom:8px}
+/* Checklist items */
+.group-label{padding:16px 2px 6px;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue)}
+.item{background:#fff;border:1px solid var(--border);border-left:4px solid var(--border);border-radius:10px;margin-bottom:8px;box-shadow:var(--shadow)}
+.item.s-ok{border-left-color:var(--green)}
+.item.s-snag{border-left-color:var(--orange)}
+.item.s-na{border-left-color:#9ca3af}
+.item-head{display:flex;align-items:flex-start;gap:8px;padding:11px 12px 6px}
+.item-text{flex:1;font-size:.92rem;font-weight:500;line-height:1.3}
+.item-set{font-size:.75rem;color:var(--grey);margin-top:2px}
+.item-icons{font-size:.75rem;color:var(--grey);white-space:nowrap}
+.status-row{display:grid;grid-template-columns:1fr 1fr 1fr 44px;gap:6px;padding:4px 12px 11px}
+.sbtn{height:42px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-family:inherit;font-weight:700;font-size:.85rem;cursor:pointer;color:#374151}
+.sbtn.ok.on{background:var(--green);border-color:var(--green);color:#fff}
+.sbtn.snag.on{background:var(--orange);border-color:var(--orange);color:#fff}
+.sbtn.na.on{background:#6b7280;border-color:#6b7280;color:#fff}
+.sbtn.more{font-size:1.1rem}
+.item-detail{padding:0 12px 12px;border-top:1px dashed var(--border);padding-top:10px}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;border:1px solid var(--border);cursor:pointer;background:var(--grey-light)}
+.thumb-add{width:64px;height:64px;border-radius:8px;border:1.5px dashed var(--blue);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:1.4rem;cursor:pointer;background:#fff}
+/* VSD table */
+.prow{display:grid;grid-template-columns:58px 1fr auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+.prow:last-child{border-bottom:none}
+.prow .pno{font-family:"DM Mono",monospace;font-size:.82rem;font-weight:500}
+.prow .pname{font-size:.82rem;line-height:1.25}
+.prow .pexp{font-family:"DM Mono",monospace;font-size:.88rem;font-weight:500;color:var(--text)}
+.prow .pinfo{font-size:.72rem;color:var(--grey)}
+.prow .pfix{font-size:.7rem;color:var(--orange);margin-top:2px}
+.prow .pctl{display:flex;gap:6px;align-items:center}
+.prow input{width:76px;padding:7px;border:1.5px solid var(--border);border-radius:6px;font-family:"DM Mono",monospace;font-size:.85rem}
+.prow.mismatch input{border-color:var(--red);background:var(--red-light)}
+.tick{width:38px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:1rem;cursor:pointer}
+.tick.on{background:var(--green);border-color:var(--green);color:#fff}
+/* Modal sheet */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:none;align-items:flex-end;justify-content:center}
+.overlay.show{display:flex}
+.sheet{background:#fff;width:100%;max-width:640px;max-height:92dvh;overflow-y:auto;border-radius:16px 16px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+.sheet h2{font-size:1.05rem;margin-bottom:12px}
+.viewer{position:fixed;inset:0;background:#000;z-index:200;display:none;flex-direction:column}
+.viewer.show{display:flex}
+.viewer img{flex:1;object-fit:contain;width:100%;min-height:0}
+.viewer .vbar{display:flex;gap:10px;padding:12px;padding-bottom:max(12px,env(safe-area-inset-bottom));align-items:center;color:#fff;font-size:.78rem}
+#toast{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 18px;border-radius:24px;font-size:.88rem;opacity:0;pointer-events:none;transition:all .25s;z-index:300;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.syncdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.boiler-tabs{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:.85rem}
+.kv div:nth-child(odd){color:var(--grey)}
+</style>
+</head>
+<body>
+
+<!-- ============================ HOME ============================ -->
+<div id="screen-home" class="screen">
+  <div class="topbar">
+    <h1>Commissioning<div class="sub" id="home-sub">Europac · coal fired</div></h1>
+    <button class="tb-btn" onclick="syncAll(true)" title="Sync now">⟳</button>
+    <button class="tb-btn" onclick="go('screen-settings')" title="Settings">⚙</button>
+  </div>
+  <div class="body" id="home-body"></div>
+  <div class="bottombar"><button class="btn btn-primary" onclick="newJob()">＋ New commissioning</button></div>
+</div>
+
+<!-- ============================ JOB DETAILS (Phase 0) ============================ -->
+<div id="screen-details" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1 id="details-title">Job details</h1>
+  </div>
+  <div class="body" id="details-body"></div>
+  <div class="bottombar"><button class="btn btn-primary" id="details-save" onclick="saveDetails()">Next: plant builder ›</button></div>
+</div>
+
+<!-- ============================ PLANT BUILDER (Phase 1) ============================ -->
+<div id="screen-plant" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1>Plant builder<div class="sub">What is on this plant?</div></h1>
+  </div>
+  <div class="body" id="plant-body"></div>
+  <div class="bottombar"><button class="btn btn-primary" onclick="savePlant()">Save plant ›</button></div>
+</div>
+
+<!-- ============================ JOB DASHBOARD ============================ -->
+<div id="screen-job" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goHome()">‹</button>
+    <h1 id="job-title">Job</h1>
+    <button class="tb-btn" onclick="syncJob(curJob(), true)" title="Sync this job">⟳</button>
+  </div>
+  <div class="body" id="job-body"></div>
+</div>
+
+<!-- ============================ SECTION (checklist) ============================ -->
+<div id="screen-section" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1 id="section-title">Section</h1>
+    <button class="tb-btn" onclick="sectionPhotos()" title="Section photo">📷</button>
+  </div>
+  <div class="body" id="section-body"></div>
+</div>
+
+<!-- ============================ MOTORS LIST ============================ -->
+<div id="screen-motors" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1>Motors & VSDs<div class="sub" id="motors-sub"></div></h1>
+  </div>
+  <div class="body" id="motors-body"></div>
+</div>
+
+<!-- ============================ MOTOR (nameplate + VSD) ============================ -->
+<div id="screen-motor" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1 id="motor-title">Motor</h1>
+  </div>
+  <div class="body" id="motor-body"></div>
+</div>
+
+<!-- ============================ SNAG LIST ============================ -->
+<div id="screen-snags" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1>Snag list<div class="sub" id="snags-sub"></div></h1>
+  </div>
+  <div class="body" id="snags-body"></div>
+  <div class="bottombar"><button class="btn btn-primary" onclick="openSnag(null)">＋ Add snag</button></div>
+</div>
+
+<!-- ============================ SETTINGS ============================ -->
+<div id="screen-settings" class="screen">
+  <div class="topbar">
+    <button class="tb-btn" onclick="goBack()">‹</button>
+    <h1>Settings</h1>
+  </div>
+  <div class="body" id="settings-body"></div>
+</div>
+
+<!-- Snag sheet -->
+<div class="overlay" id="snag-overlay" onclick="if(event.target===this)closeSnag()">
+  <div class="sheet" id="snag-sheet"></div>
+</div>
+<!-- Photo viewer -->
+<div class="viewer" id="viewer">
+  <img id="viewer-img" alt="">
+  <div class="vbar">
+    <div style="flex:1;word-break:break-all" id="viewer-name"></div>
+    <button class="btn btn-danger btn-sm" onclick="viewerDelete()">Delete</button>
+    <button class="btn btn-secondary btn-sm" onclick="closeViewer()">Close</button>
+  </div>
+</div>
+<input type="file" id="photo-input" accept="image/*" capture="environment" multiple style="display:none" onchange="onPhotosPicked(event)">
+<input type="file" id="photo-input-gallery" accept="image/*" multiple style="display:none" onchange="onPhotosPicked(event)">
+<input type="file" id="backup-input" accept=".json,application/json" style="display:none" onchange="importBackup(event)">
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.18.0/lib/msal-browser.min.js"></script>
+<script src="data.js"></script>
+<script>
+// ======================================================================
+// Commissioning App — engine
+// ======================================================================
+const APP_VERSION = '0.1.0';
+const STORAGE_KEY = 'commissioning_app_v1';
+const OD_GRAPH = 'https://graph.microsoft.com/v1.0';
+
+let APP = null;
+let navStack = [];
+let ctx = { jobId: null, boiler: 0, section: null, motor: null, photoTarget: null, open: {} };
+let swReg = null;
+
+// ---------------------------------------------------------------- utils
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function toast(msg, ms) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms || 2500);
+}
+function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function nowTime() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function isOnline() { return navigator.onLine !== false; }
+// Windows/OneDrive-safe name
+function sanitizeName(s, max) {
+  return String(s || '').replace(/[\\/:*?"<>|#%]/g, '').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '').slice(0, max || 120);
+}
+// Compact token for photo names: "Belts tensioned" -> "BeltsTensioned"
+function token(s, max) {
+  return String(s || '').replace(/\(.*?\)/g, '').split(/[^A-Za-z0-9]+/).filter(Boolean)
+    .map(w => w[0].toUpperCase() + w.slice(1)).join('').slice(0, max || 28) || 'Item';
+}
+
+// ---------------------------------------------------------------- storage
+function initData() {
+  return {
+    jobs: {}, library: {},
+    settings: { engineer: '',
+      oneDrive: { clientId: '', folderName: 'Commissioning', folderId: null, account: null, connected: false } }
+  };
+}
+function loadData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (e) { return null; } }
+function saveData() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(APP)); }
+  catch (e) {
+    toast('⚠️ SAVE FAILED — storage full');
+    alert('WARNING: the app could not save (' + (e.name || e) + '). Sync to OneDrive and remove old jobs.');
+    throw e;
+  }
+}
+function migrateData() {
+  const d = initData();
+  APP.jobs = APP.jobs || {}; APP.library = APP.library || {};
+  APP.settings = Object.assign(d.settings, APP.settings || {});
+  APP.settings.oneDrive = Object.assign(d.settings.oneDrive, APP.settings.oneDrive || {});
+}
+// Mark a job changed: saved locally now, synced later.
+function touch(job) { job.modifiedAt = new Date().toISOString(); saveData(); scheduleSync(); }
+
+// ---- IndexedDB for photo bytes (same pattern as the FSO app) ----
+let _idb = null;
+function idbOpen() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('commissioning-files', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => { _idb = r.result; res(_idb); };
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbPut(id, b64) { return idbOpen().then(db => new Promise((res, rej) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(b64, id); tx.oncomplete = res; tx.onerror = () => rej(tx.error); })); }
+function idbGet(id) { return idbOpen().then(db => new Promise((res, rej) => { const q = db.transaction('files').objectStore('files').get(id); q.onsuccess = () => res(q.result || null); q.onerror = () => rej(q.error); })); }
+function idbDel(id) { return idbOpen().then(db => new Promise(res => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(id); tx.oncomplete = res; tx.onerror = res; })); }
+
+// Photos: always re-encode to JPEG, 1600 px longest edge, q 0.72 (~250 KB).
+function compressImageFile(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600, scale = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.72).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+// ---------------------------------------------------------------- navigation
+const RENDER = {
+  'screen-home': renderHome, 'screen-details': renderDetails, 'screen-plant': renderPlant,
+  'screen-job': renderJob, 'screen-section': renderSection, 'screen-motors': renderMotors,
+  'screen-motor': renderMotor, 'screen-snags': renderSnags, 'screen-settings': renderSettings,
+};
+function showScreen(id) {
+  logAction('screen → ' + id);
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  ctx.screen = id;
+  if (RENDER[id]) RENDER[id]();
+}
+function go(id) { if (ctx.screen) navStack.push(ctx.screen); showScreen(id); }
+function goBack() { showScreen(navStack.pop() || 'screen-home'); }
+function goHome() { navStack = []; showScreen('screen-home'); }
+function rerender() { if (RENDER[ctx.screen]) RENDER[ctx.screen](); }
+
+// ---------------------------------------------------------------- job model
+function curJob() { return APP.jobs[ctx.jobId]; }
+function plantDefaults() {
+  const p = {};
+  PLANT_QUESTIONS.forEach(g => g.items.forEach(q => { p[q.id] = Array.isArray(q.def) ? q.def.slice() : q.def; }));
+  return p;
+}
+function jobLabel(j) { return (j.details.contract || 'No contract') + ' – ' + (j.details.customer || 'No customer'); }
+function boilerNo(job, b) { return (job.boilers[b] && job.boilers[b].no) || String(b + 1); }
+function sectionsFor(job) { return SECTIONS.filter(s => !s.when || s.when(job.plant)); }
+function itemKey(b, sec, id) { return b + '|' + sec + '|' + id; }
+function motorKey(b, id) { return b + '|' + id; }
+function motorsForBoiler(job, b) {
+  // Transfer pumps serve the plant, not one boiler — list them under boiler 1 only.
+  return motorsFor(job.plant).filter(m => !(b > 0 && /^tp\d/.test(m.id)));
+}
+function sectionProgress(job, b, sec) {
+  const items = sec.items.filter(i => i.id);
+  let done = 0, snags = 0;
+  items.forEach(i => { const a = job.answers[itemKey(b, sec.key, i.id)]; if (a && a.s) { done++; if (a.s === 'snag') snags++; } });
+  return { total: items.length, done, snags };
+}
+function openSnags(job) { return (job.snags || []).filter(s => !s.completed); }
+function jobSyncState(job) {
+  const pendingPhotos = Object.values(job.photos || {}).filter(p => !p.up).length;
+  const dirty = !job.syncedAt || job.syncedAt < job.modifiedAt;
+  return { pendingPhotos, dirty, ok: !dirty && !pendingPhotos };
+}
+
+function newJob() {
+  const id = uid();
+  APP.jobs[id] = {
+    id, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(), syncedAt: null,
+    details: { customer: '', contract: '', address: '', contactPerson: '', contactNumber: '',
+      startDate: todayStr(), startTime: nowTime(), engineer: APP.settings.engineer || '', boilerModel: '' },
+    plant: plantDefaults(), boilers: [{ no: '', stokerNos: '' }],
+    answers: {}, motors: {}, photos: {}, snags: [], od: {}
+  };
+  ctx.jobId = id; ctx.isNew = true;
+  saveData();
+  go('screen-details');
+}
+function openJob(id) { ctx.jobId = id; ctx.boiler = 0; navStack = ['screen-home']; showScreen('screen-job'); }
+
+// ---------------------------------------------------------------- HOME
+function renderHome() {
+  const jobs = Object.values(APP.jobs).sort((a, b) => (b.modifiedAt || '').localeCompare(a.modifiedAt || ''));
+  const od = APP.settings.oneDrive;
+  let h = '';
+  if (!od.clientId) h += `<div class="card" style="border-color:var(--orange)"><b>OneDrive not set up</b><div class="hint">Jobs are saved on this phone only. Add the Client ID under Settings → OneDrive to back them up to the cloud.</div></div>`;
+  else if (!odIsConnected()) h += `<div class="card" style="border-color:var(--orange)"><b>Not signed in to OneDrive</b><div class="hint">Sign in under Settings → OneDrive. Work continues offline in the meantime.</div></div>`;
+  if (!jobs.length) {
+    h += `<div class="empty"><div class="icon">🔥</div><p>No commissioning jobs yet.<br>Tap <b>New commissioning</b> to start.</p></div>`;
+  } else {
+    h += '<div class="list">' + jobs.map(j => {
+      const st = jobSyncState(j), snags = openSnags(j).length;
+      const dot = st.ok ? 'var(--green)' : 'var(--orange)';
+      return `<div class="li" onclick="openJob('${j.id}')">
+        <div class="li-main"><div class="li-title">${esc(jobLabel(j))}</div>
+        <div class="li-sub"><span class="syncdot" style="background:${dot}"></span>${st.ok ? 'Synced' : 'Not synced' + (st.pendingPhotos ? ' · ' + st.pendingPhotos + ' photo(s) waiting' : '')}
+        · ${esc(j.details.startDate || '')}${j.details.boilerModel ? ' · ' + esc(j.details.boilerModel) : ''}</div></div>
+        ${snags ? `<span class="chip chip-orange">${snags} snag${snags > 1 ? 's' : ''}</span>` : ''}
+      </div>`;
+    }).join('') + '</div>';
+  }
+  document.getElementById('home-body').innerHTML = h;
+}
+
+// ---------------------------------------------------------------- PHASE 0: details
+const DETAIL_FIELDS = [
+  ['customer', 'Customer'], ['contract', 'Contract no.'], ['address', 'Address', 'textarea'],
+  ['contactPerson', 'Contact person'], ['contactNumber', 'Contact number', 'tel'],
+  ['startDate', 'Start date', 'date'], ['startTime', 'Start time', 'time'],
+  ['engineer', 'Commissioning engineer'], ['boilerModel', 'Boiler model'],
+];
+function renderDetails() {
+  const j = curJob();
+  document.getElementById('details-title').textContent = ctx.isNew ? 'New commissioning' : 'Job details';
+  document.getElementById('details-save').textContent = ctx.isNew ? 'Next: plant builder ›' : 'Save';
+  let h = '<div class="card">';
+  DETAIL_FIELDS.forEach(([k, label, type]) => {
+    h += `<div class="form-group"><label>${label}</label>` + (type === 'textarea'
+      ? `<textarea class="form-control" id="d-${k}">${esc(j.details[k])}</textarea>`
+      : `<input class="form-control" id="d-${k}" type="${type || 'text'}" value="${esc(j.details[k])}">`) + '</div>';
+  });
+  h += '</div><div class="card"><div class="card-title">Boiler numbers</div><div class="hint" style="margin-bottom:10px">Set the number of boilers in the plant builder. Boiler and stoker numbers can be filled in here at any time.</div>';
+  j.boilers.forEach((b, i) => {
+    h += `<div class="form-row"><div class="form-group"><label>Boiler ${i + 1} – boiler no.</label><input class="form-control" id="b-no-${i}" value="${esc(b.no)}"></div>
+      <div class="form-group"><label>Stoker no(s).</label><input class="form-control" id="b-st-${i}" value="${esc(b.stokerNos)}"></div></div>`;
+  });
+  h += '</div>';
+  document.getElementById('details-body').innerHTML = h;
+}
+function saveDetails() {
+  const j = curJob();
+  DETAIL_FIELDS.forEach(([k]) => { j.details[k] = document.getElementById('d-' + k).value.trim(); });
+  j.boilers.forEach((b, i) => { b.no = document.getElementById('b-no-' + i).value.trim(); b.stokerNos = document.getElementById('b-st-' + i).value.trim(); });
+  if (j.details.engineer) APP.settings.engineer = j.details.engineer;
+  if (!j.details.contract) { toast('Contract no. is needed — it names the folder and photos'); return; }
+  touch(j);
+  // New job: details → plant builder → dashboard (Back from the builder lands on the dashboard).
+  if (ctx.isNew) { ctx.isNew = false; navStack = ['screen-home', 'screen-job']; showScreen('screen-plant'); }
+  else goBack();
+}
+
+// ---------------------------------------------------------------- PHASE 1: plant builder
+let plantDraft = null;
+function optionsFor(q) {
+  const lib = q.library ? (APP.library[q.library] || []) : [];
+  return (q.options || []).concat(lib.filter(o => !(q.options || []).includes(o)));
+}
+function renderPlant() {
+  const j = curJob();
+  if (!plantDraft || plantDraft._job !== j.id) plantDraft = Object.assign({ _job: j.id }, plantDefaults(), JSON.parse(JSON.stringify(j.plant)));
+  const p = plantDraft;
+  let h = '';
+  PLANT_QUESTIONS.forEach(g => {
+    const qs = g.items.filter(q => !q.show || q.show(p));
+    if (!qs.length) return;
+    h += `<div class="section-label">${esc(g.group)}</div><div class="card">`;
+    qs.forEach(q => {
+      h += `<div class="q"><div class="q-label">${esc(q.label)}</div>`;
+      if (q.type === 'count') {
+        h += `<div class="stepper"><button onclick="plantStep('${q.id}',-1)">−</button><span>${p[q.id]}</span><button onclick="plantStep('${q.id}',1)">＋</button></div>`;
+      } else if (q.type === 'toggle') {
+        h += `<div class="opts"><div class="opt ${p[q.id] ? 'on' : ''}" onclick="plantSet('${q.id}',true)">Yes</div><div class="opt ${!p[q.id] ? 'on' : ''}" onclick="plantSet('${q.id}',false)">No</div></div>`;
+      } else {
+        const multi = q.type === 'multi';
+        h += '<div class="opts">' + optionsFor(q).map(o => {
+          const on = multi ? (p[q.id] || []).includes(o) : p[q.id] === o;
+          return `<div class="opt ${on ? 'on' : ''}" onclick='plantPick(${JSON.stringify(q.id)},${JSON.stringify(o)})'>${esc(o)}</div>`;
+        }).join('') + (q.library ? `<div class="opt add" onclick="plantAdd('${q.id}')">＋ Add</div>` : '') + '</div>';
+      }
+      if (q.hint) h += `<div class="hint">${esc(q.hint)}</div>`;
+      h += '</div>';
+    });
+    h += '</div>';
+  });
+  document.getElementById('plant-body').innerHTML = h;
+}
+function findQ(id) { for (const g of PLANT_QUESTIONS) for (const q of g.items) if (q.id === id) return q; }
+function plantStep(id, d) { const q = findQ(id); plantDraft[id] = Math.min(q.max, Math.max(q.min, (plantDraft[id] || 0) + d)); renderPlant(); }
+function plantSet(id, v) { plantDraft[id] = v; renderPlant(); }
+function plantPick(id, o) {
+  const q = findQ(id);
+  if (q.type === 'multi') {
+    const arr = plantDraft[id] || (plantDraft[id] = []);
+    const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); else arr.push(o);
+  } else plantDraft[id] = o;
+  renderPlant();
+}
+// "+" — new equipment goes into the library so it is offered on every future job.
+function plantAdd(id) {
+  const q = findQ(id);
+  const name = (prompt('Add an option to "' + q.label + '"\n\nIt will be offered on every new job from now on.') || '').trim();
+  if (!name) return;
+  const lib = APP.library[q.library] || (APP.library[q.library] = []);
+  if (!optionsFor(q).includes(name)) lib.push(name);
+  saveData();
+  plantPick(id, name);
+}
+function savePlant() {
+  const j = curJob();
+  const p = Object.assign({}, plantDraft); delete p._job;
+  j.plant = p;
+  // keep the boiler list in step with the count
+  while (j.boilers.length < p.boilers) j.boilers.push({ no: '', stokerNos: '' });
+  if (j.boilers.length > p.boilers) j.boilers.length = p.boilers;
+  plantDraft = null;
+  touch(j);
+  toast('Plant saved — checklists built for this plant');
+  goBack();
+}
+
+// ---------------------------------------------------------------- JOB DASHBOARD
+function renderJob() {
+  const j = curJob(); if (!j) return goHome();
+  const b = Math.min(ctx.boiler, j.boilers.length - 1); ctx.boiler = b;
+  document.getElementById('job-title').innerHTML = esc(j.details.contract || 'Job') + `<div class="sub">${esc(j.details.customer)}</div>`;
+  const st = jobSyncState(j);
+  let h = `<div class="card"><div class="kv">
+    <div>Customer</div><div>${esc(j.details.customer) || '—'}</div>
+    <div>Boiler model</div><div>${esc(j.details.boilerModel) || '—'}</div>
+    <div>Started</div><div>${esc(j.details.startDate)} ${esc(j.details.startTime)}</div>
+    <div>Cloud</div><div>${st.ok ? '<span class="chip chip-green">Synced</span>' : '<span class="chip chip-orange">Waiting to sync' + (st.pendingPhotos ? ' · ' + st.pendingPhotos + ' photos' : '') + '</span>'}</div>
+  </div><div class="btn-row" style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-secondary btn-sm" onclick="go('screen-details')">Edit details</button>
+    <button class="btn btn-secondary btn-sm" onclick="go('screen-plant')">Plant builder</button>
+  </div></div>`;
+  if (j.boilers.length > 1) {
+    h += '<div class="boiler-tabs">' + j.boilers.map((bo, i) =>
+      `<div class="opt ${i === b ? 'on' : ''}" onclick="ctx.boiler=${i};renderJob()">Boiler ${esc(bo.no || i + 1)}</div>`).join('') + '</div>';
+  }
+  // Phase tiles
+  const secs = sectionsFor(j);
+  let tot = 0, done = 0;
+  secs.forEach(s => { const pr = sectionProgress(j, b, s); tot += pr.total; done += pr.done; });
+  const motors = motorsForBoiler(j, b);
+  const npDone = motors.filter(m => { const r = j.motors[motorKey(b, m.id)]; return r && r.np && r.np.kw; }).length;
+  const os = openSnags(j).length;
+  h += `<div class="tiles">
+    <div class="tile disabled"><div class="t-icon">📋</div><div class="t-title">Pre-commissioning</div><div class="t-sub">F27 · next build</div></div>
+    <div class="tile" onclick="document.getElementById('sec-list').scrollIntoView({behavior:'smooth'})"><div class="t-icon">🔧</div><div class="t-title">Commissioning</div><div class="t-sub">${done}/${tot} items</div></div>
+    <div class="tile" onclick="go('screen-motors')"><div class="t-icon">⚙️</div><div class="t-title">Motors & VSDs</div><div class="t-sub">${npDone}/${motors.length} nameplates</div></div>
+    <div class="tile" onclick="go('screen-snags')"><div class="t-icon">⚠️</div><div class="t-title">Snag list</div><div class="t-sub">${os} open · ${(j.snags || []).length} total</div></div>
+    <div class="tile disabled"><div class="t-icon">✍️</div><div class="t-title">Handover</div><div class="t-sub">F69 · next build</div></div>
+    <div class="tile disabled"><div class="t-icon">📤</div><div class="t-title">Export</div><div class="t-sub">F27 · F63 · F40 · F69</div></div>
+  </div>`;
+  h += `<div class="section-label" id="sec-list">Commissioning checklist${j.boilers.length > 1 ? ' – boiler ' + esc(boilerNo(j, b)) : ''}</div><div class="list">`;
+  secs.forEach(s => {
+    const built = s.items.length > 0, pr = sectionProgress(j, b, s);
+    const chip = !built ? '<span class="chip chip-grey">Next build</span>'
+      : pr.done === pr.total ? '<span class="chip chip-green">Done</span>'
+      : `<span class="chip chip-blue">${pr.done}/${pr.total}</span>`;
+    h += `<div class="li ${built ? '' : 'disabled'}" ${built ? `onclick="openSection('${s.key}')"` : ''}>
+      <div class="li-no">${s.no}</div>
+      <div class="li-main"><div class="li-title">${esc(s.title)}</div>
+      ${built && pr.total ? `<div class="progress"><div style="width:${Math.round(pr.done / pr.total * 100)}%"></div></div>` : ''}</div>
+      ${pr.snags ? `<span class="chip chip-orange">${pr.snags} ⚠</span>` : ''}${chip}</div>`;
+  });
+  h += '</div>';
+  h += `<button class="btn btn-danger" style="margin-top:24px" onclick="deleteJob()">Delete job from this phone</button>`;
+  document.getElementById('job-body').innerHTML = h;
+}
+function deleteJob() {
+  const j = curJob();
+  const st = jobSyncState(j);
+  if (!confirm('Delete "' + jobLabel(j) + '" from this phone?' + (st.ok ? '\n\nIt is synced, so the copy on OneDrive stays.' : '\n\n⚠️ It is NOT fully synced — unsynced work will be lost.'))) return;
+  Object.keys(j.photos || {}).forEach(id => idbDel(id));
+  delete APP.jobs[j.id]; saveData(); goHome();
+}
+
+// ---------------------------------------------------------------- SECTION (checklist)
+function openSection(key) { ctx.section = key; ctx.open = {}; go('screen-section'); }
+function curSection() { return SECTIONS.find(s => s.key === ctx.section); }
+function renderSection() {
+  const j = curJob(), s = curSection(), b = ctx.boiler;
+  document.getElementById('section-title').innerHTML = esc(s.title) + (j.boilers.length > 1 ? `<div class="sub">Boiler ${esc(boilerNo(j, b))}</div>` : '');
+  let h = '';
+  const secPh = sectionPhotoIds(j, b, s.key);
+  if (secPh.length) h += `<div class="card"><div class="card-title">Section photos</div><div class="thumbs">${thumbsHtml(secPh)}</div></div>`;
+  if (s.motor) {
+    const m = motorsForBoiler(j, b).find(x => x.id === s.motor);
+    if (m) {
+      const r = j.motors[motorKey(b, m.id)] || {};
+      h += `<div class="li" style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:8px" onclick="openMotor('${m.id}')">
+        <div class="li-main"><div class="li-title">⚙️ ${esc(m.name)} – nameplate & VSD</div>
+        <div class="li-sub">${r.np && r.np.kw ? esc(r.np.kw) + ' kW · ' + esc(r.np.a || '?') + ' A' : 'Nameplate not captured yet'}</div></div><span>›</span></div>`;
+    }
+  }
+  s.items.forEach(it => {
+    if (it.g) { h += `<div class="group-label">${esc(it.g)}</div>`; return; }
+    const k = itemKey(b, s.key, it.id), a = j.answers[k] || {};
+    const open = ctx.open[it.id];
+    const nPh = (a.ph || []).length;
+    h += `<div class="item ${a.s ? 's-' + a.s : ''}" id="it-${it.id}">
+      <div class="item-head"><div class="item-text">${esc(it.t)}${it.set ? `<div class="item-set">Setting: ${esc(it.set)}</div>` : ''}</div>
+      <div class="item-icons">${nPh ? '📷' + nPh : ''} ${a.c || a.af || a.act ? '💬' : ''}</div></div>
+      <div class="status-row">
+        <button class="sbtn ok ${a.s === 'ok' ? 'on' : ''}" onclick="setStatus('${it.id}','ok')">✓ OK</button>
+        <button class="sbtn snag ${a.s === 'snag' ? 'on' : ''}" onclick="setStatus('${it.id}','snag')">⚠ Snag</button>
+        <button class="sbtn na ${a.s === 'na' ? 'on' : ''}" onclick="setStatus('${it.id}','na')">N/A</button>
+        <button class="sbtn more" onclick="toggleItem('${it.id}')">${open ? '▴' : '▾'}</button>
+      </div>`;
+    if (open) {
+      h += `<div class="item-detail">
+        <div class="form-row"><div class="form-group"><label>As found</label><input class="form-control" value="${esc(a.af)}" onchange="setField('${it.id}','af',this.value)"></div>
+        <div class="form-group"><label>Action taken</label><input class="form-control" value="${esc(a.act)}" onchange="setField('${it.id}','act',this.value)"></div></div>
+        <div class="form-group"><label>Comment</label><textarea class="form-control" onchange="setField('${it.id}','c',this.value)">${esc(a.c)}</textarea></div>
+        <label style="font-size:.8rem;font-weight:600">Photos</label>
+        <div class="thumbs">${thumbsHtml(a.ph || [])}
+          <div class="thumb-add" onclick="addPhoto({kind:'item',item:'${it.id}'},true)">📷</div>
+          <div class="thumb-add" onclick="addPhoto({kind:'item',item:'${it.id}'},false)">🖼</div></div>
+        ${a.snagId ? `<button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="openSnag('${a.snagId}')">Open linked snag</button>` : ''}
+      </div>`;
+    }
+    h += '</div>';
+  });
+  const pr = sectionProgress(j, b, s);
+  h += `<div class="hint" style="text-align:center;margin-top:12px">${pr.done} of ${pr.total} answered${pr.snags ? ' · ' + pr.snags + ' snag(s)' : ''}</div>`;
+  document.getElementById('section-body').innerHTML = h;
+}
+function toggleItem(id) { ctx.open[id] = !ctx.open[id]; renderSection(); }
+function answer(id) {
+  const j = curJob(), k = itemKey(ctx.boiler, ctx.section, id);
+  return j.answers[k] || (j.answers[k] = {});
+}
+function setField(id, f, v) { answer(id)[f] = v.trim(); touch(curJob()); }
+function setStatus(id, s) {
+  const j = curJob(), a = answer(id);
+  if (a.s === s) return;
+  if (a.s === 'snag' && a.snagId) {
+    const sn = j.snags.find(x => x.id === a.snagId);
+    if (sn && !confirm('This item has a snag on the snag list.\n\nRemove the snag?')) return;
+    j.snags = j.snags.filter(x => x.id !== a.snagId); delete a.snagId;
+  }
+  a.s = s; a.at = new Date().toISOString();
+  touch(j);
+  if (s === 'snag') {
+    const sec = curSection(), it = sec.items.find(x => x.id === id);
+    openSnag(null, { boiler: ctx.boiler, section: sec.key, item: id,
+      label: (j.boilers.length > 1 ? 'Boiler ' + boilerNo(j, ctx.boiler) + ' – ' : '') + sec.title + ': ' + it.t });
+  }
+  renderSection();
+}
+
+// ---------------------------------------------------------------- PHOTOS
+// target: {kind:'item', item} | {kind:'section'} | {kind:'motor', motor} | {kind:'snag', snag}
+function addPhoto(target, camera) {
+  ctx.photoTarget = Object.assign({ boiler: ctx.boiler, section: ctx.section }, target);
+  document.getElementById(camera ? 'photo-input' : 'photo-input-gallery').click();
+}
+function sectionPhotos() { addPhoto({ kind: 'section' }, true); }
+function sectionPhotoIds(j, b, key) {
+  return Object.values(j.photos || {}).filter(p => p.kind === 'section' && p.boiler === b && p.section === key).map(p => p.id);
+}
+// Folder + file name for a new photo, e.g. "14 ID fan" / "C24-118_B1_IDFan_BeltsTensioned_01.jpg"
+function photoNaming(j, t) {
+  const bno = token(boilerNo(j, t.boiler), 8).replace(/^B(?=\d)/i, '');  // "B1234" → "_B1234", not "_BB1234"
+  const contract = sanitizeName(j.details.contract, 30).replace(/\s+/g, '-');
+  let folder, part;
+  if (t.kind === 'motor') {
+    const m = motorsFor(j.plant).find(x => x.id === t.motor);
+    folder = '30 Motor nameplates'; part = token(m ? m.name : t.motor) + '_Nameplate';
+  } else if (t.kind === 'snag') {
+    const sn = j.snags.find(x => x.id === t.snag);
+    folder = '40 Snag list'; part = 'Snag' + String(sn ? sn.no : 0).padStart(2, '0');
+  } else {
+    const s = SECTIONS.find(x => x.key === t.section);
+    folder = s.no + ' ' + s.title;
+    part = s.short + (t.kind === 'item' ? '_' + token((s.items.find(i => i.id === t.item) || {}).t) : '_Section');
+  }
+  const base = contract + '_B' + bno + '_' + part;
+  const used = Object.values(j.photos).filter(p => p.base === base).length;
+  return { folder: sanitizeName(folder, 60), base, name: base + '_' + String(used + 1).padStart(2, '0') + '.jpg' };
+}
+async function onPhotosPicked(ev) {
+  const files = Array.from(ev.target.files || []); ev.target.value = '';
+  if (!files.length) return;
+  const j = curJob(), t = ctx.photoTarget;
+  toast('Saving ' + files.length + ' photo(s)…');
+  for (const f of files) {
+    const b64 = await compressImageFile(f);
+    if (!b64) { toast('Could not read ' + f.name); continue; }
+    const id = uid(), nm = photoNaming(j, t);
+    await idbPut(id, b64);
+    j.photos[id] = { id, kind: t.kind, boiler: t.boiler, section: t.section || null, item: t.item || null,
+      motor: t.motor || null, snag: t.snag || null, folder: nm.folder, base: nm.base, name: nm.name,
+      takenAt: new Date().toISOString(), up: false };
+    if (t.kind === 'item') { const a = (j.answers[itemKey(t.boiler, t.section, t.item)] ||= {}); (a.ph ||= []).push(id); }
+    if (t.kind === 'motor') { const r = (j.motors[motorKey(t.boiler, t.motor)] ||= {}); (r.ph ||= []).push(id); }
+    if (t.kind === 'snag') { const sn = j.snags.find(x => x.id === t.snag); if (sn) (sn.ph ||= []).push(id); }
+  }
+  touch(j);
+  toast('Saved as ' + j.photos[Object.keys(j.photos).pop()].name, 3500);
+  if (document.getElementById('snag-overlay').classList.contains('show')) renderSnagSheet(); else rerender();
+}
+function thumbsHtml(ids) {
+  // Thumbnails are filled in asynchronously from IndexedDB.
+  setTimeout(() => ids.forEach(async id => {
+    const el = document.querySelector('img[data-ph="' + id + '"]');
+    if (el && !el.src) { const b64 = await idbGet(id); if (b64) el.src = 'data:image/jpeg;base64,' + b64; }
+  }), 0);
+  return ids.map(id => `<img class="thumb" data-ph="${id}" onclick="openViewer('${id}')">`).join('');
+}
+let viewerId = null;
+async function openViewer(id) {
+  viewerId = id;
+  const p = curJob().photos[id], b64 = await idbGet(id);
+  document.getElementById('viewer-img').src = b64 ? 'data:image/jpeg;base64,' + b64 : '';
+  document.getElementById('viewer-name').textContent = p ? p.name + (p.up ? ' · ☁ uploaded' : ' · waiting to upload') : '';
+  document.getElementById('viewer').classList.add('show');
+}
+function closeViewer() { document.getElementById('viewer').classList.remove('show'); viewerId = null; }
+async function viewerDelete() {
+  const j = curJob(), p = j.photos[viewerId];
+  if (!p || !confirm('Delete this photo?' + (p.up ? '\n\nThe copy already on OneDrive stays.' : ''))) return;
+  Object.values(j.answers).forEach(a => { if (a.ph) a.ph = a.ph.filter(x => x !== viewerId); });
+  Object.values(j.motors).forEach(r => { if (r.ph) r.ph = r.ph.filter(x => x !== viewerId); });
+  (j.snags || []).forEach(s => { if (s.ph) s.ph = s.ph.filter(x => x !== viewerId); });
+  delete j.photos[viewerId]; await idbDel(viewerId);
+  touch(j); closeViewer();
+  if (document.getElementById('snag-overlay').classList.contains('show')) renderSnagSheet(); else rerender();
+}
+
+// ---------------------------------------------------------------- MOTORS & VSDs
+function renderMotors() {
+  const j = curJob(), b = ctx.boiler;
+  const ms = motorsForBoiler(j, b);
+  document.getElementById('motors-sub').textContent = (j.boilers.length > 1 ? 'Boiler ' + boilerNo(j, b) + ' · ' : '') + ms.length + ' motors';
+  let h = '<div class="list">';
+  ms.forEach(m => {
+    const r = j.motors[motorKey(b, m.id)] || {};
+    const np = r.np && r.np.kw;
+    let vsd = '';
+    if (m.drive) {
+      const set = VSD_SETS[r.set || defaultSet(j, m)], pr = vsdProgress(j, b, m);
+      vsd = ` · ${set.model} ${pr.done}/${pr.total}${pr.bad ? ' · ' + pr.bad + ' ≠' : ''}`;
+    } else vsd = ' · DOL';
+    h += `<div class="li" onclick="openMotor('${m.id}')"><div class="li-main"><div class="li-title">${esc(m.name)}</div>
+      <div class="li-sub">${np ? esc(r.np.kw) + ' kW · ' + esc(r.np.a || '?') + ' A' : 'Nameplate –'}${vsd}</div></div>
+      ${(r.ph || []).length ? '📷' : ''}${np ? '<span class="chip chip-green">✓</span>' : '<span class="chip chip-grey">To do</span>'}</div>`;
+  });
+  h += '</div>';
+  document.getElementById('motors-body').innerHTML = h;
+}
+function openMotor(id) { ctx.motor = id; go('screen-motor'); }
+function defaultSet(j, m) { return /WEG/i.test(j.plant.vsdMake || '') ? m.wdef : m.ydef; }
+function motorRec(j, b, id) { const k = motorKey(b, id); return j.motors[k] || (j.motors[k] = {}); }
+// Expected value for a parameter row, pulling nameplate data where needed.
+function expected(row, np) {
+  if (row.site) return { v: '', note: 'Set on site', need: true };
+  if (row.np) {
+    if (row.np === 'poles') {
+      const hz = parseFloat(np.hz || 50), rpm = parseFloat(np.rpm);
+      if (!rpm) return { v: '', note: 'From nameplate (rpm)', need: true };
+      let poles = Math.round(120 * hz / rpm); if (poles % 2) poles += 1;
+      return { v: String(poles), from: 'nameplate' };
+    }
+    const v = np[row.np];
+    return v ? { v: String(v), from: 'nameplate' } : { v: '', note: 'From nameplate', need: true };
+  }
+  return { v: row.v };
+}
+function norm(v) { return String(v || '').trim().toLowerCase().replace(',', '.').replace(/^0+(?=\d)/, '').replace(/\.0+$/, ''); }
+function vsdProgress(j, b, m) {
+  const r = j.motors[motorKey(b, m.id)] || {}, set = VSD_SETS[r.set || defaultSet(j, m)];
+  let done = 0, bad = 0;
+  set.params.forEach(p => {
+    const st = (r.vsd || {})[p.p];
+    if (!st) return;
+    if (st.ok) done++;
+    else if (st.act) { done++; const e = expected(p, r.np || {}); if (e.v && norm(e.v) !== norm(st.act)) bad++; }
+  });
+  return { total: set.params.length, done, bad };
+}
+function renderMotor() {
+  const j = curJob(), b = ctx.boiler, m = motorsForBoiler(j, b).find(x => x.id === ctx.motor);
+  const r = motorRec(j, b, m.id), np = r.np || {};
+  document.getElementById('motor-title').innerHTML = esc(m.name) + (j.boilers.length > 1 ? `<div class="sub">Boiler ${esc(boilerNo(j, b))}</div>` : '');
+  const ty = m.typical || {};
+  let h = `<div class="card"><div class="card-title">Nameplate</div>
+    <div class="thumbs" style="margin-bottom:12px">${thumbsHtml(r.ph || [])}
+      <div class="thumb-add" onclick="addPhoto({kind:'motor',motor:'${m.id}'},true)">📷</div>
+      <div class="thumb-add" onclick="addPhoto({kind:'motor',motor:'${m.id}'},false)">🖼</div></div>
+    <div class="form-row">`;
+  NAMEPLATE_FIELDS.forEach(f => {
+    const val = np[f.k] != null ? np[f.k] : (f.def && !np._touched ? f.def : '');
+    const ph = ty[f.k] ? 'Typical ' + ty[f.k] : '';
+    h += `<div class="form-group"${f.measured ? ' style="grid-column:1/-1"' : ''}><label>${esc(f.t)}${f.u ? ' (' + f.u + ')' : ''}</label>` + (f.opts
+      ? `<select class="form-control" onchange="setNp('${f.k}',this.value)"><option value=""></option>${f.opts.map(o => `<option ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+      : `<input class="form-control ${f.num ? 'mono' : ''}" ${f.num ? 'inputmode="decimal"' : ''} placeholder="${esc(ph)}" value="${esc(val)}" onchange="setNp('${f.k}',this.value)">`) + '</div>';
+  });
+  h += `</div><div class="hint">Nameplate values fill the F63 motor data table and the VSD motor parameters below.</div></div>`;
+
+  if (!m.drive) {
+    h += `<div class="card"><div class="card-title">Drive</div>Direct-on-line starter — no VSD parameters.</div>`;
+  } else {
+    const setKey = r.set || defaultSet(j, m), set = VSD_SETS[setKey], pr = vsdProgress(j, b, m);
+    h += `<div class="card"><div class="card-title">VSD parameters</div>
+      <div class="form-group"><label>Drive / parameter set</label><select class="form-control" onchange="setVsdSet(this.value)">
+      ${Object.keys(VSD_SETS).map(k => `<option value="${k}" ${k === setKey ? 'selected' : ''}>${VSD_SETS[k].make} ${VSD_SETS[k].model} – ${esc(VSD_SETS[k].label)}</option>`).join('')}
+      </select></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><span class="chip ${pr.bad ? 'chip-red' : pr.done === pr.total ? 'chip-green' : 'chip-blue'}">${pr.done}/${pr.total} checked${pr.bad ? ' · ' + pr.bad + ' differ' : ''}</span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="tickAllVsd()">✓ Tick all set as listed</button></div>
+      <div class="hint" style="margin-bottom:6px">Tap ✓ when the drive matches. If it doesn't, type what the drive is actually set to — differences are flagged red.</div>`;
+    set.params.forEach(p => {
+      const e = expected(p, np), st = (r.vsd || {})[p.p] || {};
+      const mism = st.act && e.v && norm(e.v) !== norm(st.act);
+      h += `<div class="prow ${mism ? 'mismatch' : ''}"><div class="pno">${esc(p.p)}</div>
+        <div><div class="pname">${esc(p.n)}</div>
+          <div><span class="pexp">${e.v ? esc(e.v) + (p.u ? ' ' + esc(p.u) : '') : ''}</span>${e.note ? ` <span class="chip chip-orange">${esc(e.note)}</span>` : ''}${e.from ? ' <span class="pinfo">(nameplate)</span>' : ''}</div>
+          ${p.i ? `<div class="pinfo">${esc(p.i)}</div>` : ''}${p.fix ? `<div class="pfix">✎ ${esc(p.fix)}</div>` : ''}</div>
+        <div class="pctl"><input placeholder="actual" value="${esc(st.act || '')}" onchange="setVsdAct('${p.p}',this.value)">
+          <button class="tick ${st.ok ? 'on' : ''}" onclick="toggleVsdOk('${p.p}')">✓</button></div></div>`;
+    });
+    h += '</div>';
+    if (set.make === 'Yaskawa') {
+      const at = r.tune || {};
+      const row = (k, t) => `<div class="prow" style="grid-template-columns:1fr auto"><div class="pname">${t}</div><button class="tick ${at[k] ? 'on' : ''}" onclick="toggleTune('${k}')">✓</button></div>`;
+      h += `<div class="card"><div class="card-title">Yaskawa – TD102</div>
+        ${row('tune', 'Auto-tune performed on site' + (set.autotune ? ' (required – torque feedback)' : ''))}
+        ${row('backup', 'Parameter backup saved with DriveWizard Industrial')}
+        ${row('sent', 'Backup sent to PB Engineering for the contract folder')}</div>`;
+    }
+  }
+  h += `<div class="card"><div class="card-title">Notes</div><textarea class="form-control" onchange="motorRec(curJob(),ctx.boiler,ctx.motor).notes=this.value.trim();touch(curJob())">${esc(r.notes || '')}</textarea></div>`;
+  document.getElementById('motor-body').innerHTML = h;
+}
+function setNp(k, v) {
+  const j = curJob(), r = motorRec(j, ctx.boiler, ctx.motor);
+  r.np = r.np || {}; r.np[k] = v.trim(); r.np._touched = true;
+  if (!r.np.hz) r.np.hz = '50';
+  touch(j); renderMotor();
+}
+function setVsdSet(k) { const j = curJob(); motorRec(j, ctx.boiler, ctx.motor).set = k; touch(j); renderMotor(); }
+function vsdState(p) { const r = motorRec(curJob(), ctx.boiler, ctx.motor); r.vsd = r.vsd || {}; return r.vsd[p] || (r.vsd[p] = {}); }
+function toggleVsdOk(p) { const s = vsdState(p); s.ok = !s.ok; if (s.ok) delete s.act; touch(curJob()); renderMotor(); }
+function setVsdAct(p, v) { const s = vsdState(p); s.act = v.trim(); if (s.act) s.ok = false; touch(curJob()); renderMotor(); }
+function tickAllVsd() {
+  const j = curJob(), m = motorsFor(j.plant).find(x => x.id === ctx.motor), r = motorRec(j, ctx.boiler, ctx.motor);
+  const set = VSD_SETS[r.set || defaultSet(j, m)];
+  let n = 0;
+  set.params.forEach(p => { const e = expected(p, r.np || {}); const s = vsdState(p.p); if (!s.ok && !s.act && !e.need) { s.ok = true; n++; } });
+  touch(j); renderMotor();
+  toast(n + ' parameter(s) ticked — rows marked "From nameplate" / "Set on site" still need you');
+}
+function toggleTune(k) { const r = motorRec(curJob(), ctx.boiler, ctx.motor); r.tune = r.tune || {}; r.tune[k] = !r.tune[k]; touch(curJob()); renderMotor(); }
+
+// ---------------------------------------------------------------- SNAG LIST (F40)
+function renderSnags() {
+  const j = curJob(), sn = j.snags || [];
+  document.getElementById('snags-sub').textContent = openSnags(j).length + ' open · ' + sn.length + ' total';
+  if (!sn.length) { document.getElementById('snags-body').innerHTML = '<div class="empty"><div class="icon">✅</div><p>No snags.<br>Snags appear here when you mark an item ⚠ Snag, or add one manually.</p></div>'; return; }
+  const card = s => `<div class="li" onclick="openSnag('${s.id}')"><div class="li-no">${s.no}</div>
+    <div class="li-main"><div class="li-title">${esc(s.desc || '(no description)')}</div>
+    <div class="li-sub">${esc(s.resp || 'No responsibility set')}${s.target ? ' · due ' + esc(s.target) : ''}${s.src ? ' · ' + esc(s.src.label) : ''}</div></div>
+    ${(s.ph || []).length ? '📷' : ''}${s.completed ? '<span class="chip chip-green">Done</span>' : '<span class="chip chip-orange">Open</span>'}</div>`;
+  const open = sn.filter(s => !s.completed), done = sn.filter(s => s.completed);
+  let h = '';
+  if (open.length) h += '<div class="section-label">Open</div><div class="list">' + open.map(card).join('') + '</div>';
+  if (done.length) h += '<div class="section-label">Completed</div><div class="list">' + done.map(card).join('') + '</div>';
+  document.getElementById('snags-body').innerHTML = h;
+}
+let snagDraft = null;
+function openSnag(id, src) {
+  const j = curJob();
+  if (id) snagDraft = JSON.parse(JSON.stringify(j.snags.find(s => s.id === id)));
+  else snagDraft = { id: uid(), _new: true, no: (j.snags || []).reduce((m, s) => Math.max(m, s.no || 0), 0) + 1,
+    desc: src ? src.label : '', resp: '', comment: '', target: '', completed: '', src: src || null, ph: [] };
+  renderSnagSheet();
+  document.getElementById('snag-overlay').classList.add('show');
+}
+function renderSnagSheet() {
+  const s = snagDraft, j = curJob();
+  const live = j.snags.find(x => x.id === s.id);
+  if (live) s.ph = live.ph || [];
+  document.getElementById('snag-sheet').innerHTML = `<h2>Snag ${s.no}</h2>
+    ${s.src ? `<div class="hint" style="margin-bottom:10px">From: ${esc(s.src.label)}</div>` : ''}
+    <div class="form-group"><label>Description – what needs to be done</label><textarea class="form-control" id="sn-desc">${esc(s.desc)}</textarea></div>
+    <div class="form-group"><label>Responsibility</label><div class="opts">${RESPONSIBILITY.map(r =>
+      `<div class="opt ${s.resp === r ? 'on' : ''}" onclick="snagDraft.resp='${r}';snagKeep();renderSnagSheet()">${r}</div>`).join('')}</div></div>
+    <div class="form-group"><label>Comment</label><textarea class="form-control" id="sn-comment">${esc(s.comment)}</textarea></div>
+    <div class="form-row"><div class="form-group"><label>Target date</label><input class="form-control" type="date" id="sn-target" value="${esc(s.target)}"></div>
+    <div class="form-group"><label>Date of completion</label><input class="form-control" type="date" id="sn-done" value="${esc(s.completed)}"></div></div>
+    ${s._new ? '<div class="hint">Save the snag first to add photos.</div>' : `<label style="font-size:.8rem;font-weight:600">Photos</label><div class="thumbs">${thumbsHtml(s.ph || [])}
+      <div class="thumb-add" onclick="snagKeep();addPhoto({kind:'snag',snag:'${s.id}'},true)">📷</div>
+      <div class="thumb-add" onclick="snagKeep();addPhoto({kind:'snag',snag:'${s.id}'},false)">🖼</div></div>`}
+    <div style="display:flex;gap:10px;margin-top:16px">
+      ${s._new ? '<button class="btn btn-secondary" onclick="closeSnag()">Cancel</button>' : '<button class="btn btn-danger" onclick="deleteSnag()">Delete</button>'}
+      <button class="btn btn-primary" onclick="saveSnag()">Save</button></div>`;
+}
+function snagKeep() {  // copy typed text into the draft before a re-render
+  ['desc', 'comment'].forEach(k => { const el = document.getElementById('sn-' + k); if (el) snagDraft[k] = el.value.trim(); });
+  const t = document.getElementById('sn-target'); if (t) snagDraft.target = t.value;
+  const d = document.getElementById('sn-done'); if (d) snagDraft.completed = d.value;
+}
+function saveSnag() {
+  snagKeep();
+  const j = curJob(), s = snagDraft;
+  if (!s.desc) { toast('Add a description'); return; }
+  const isNew = s._new; delete s._new;
+  const ix = j.snags.findIndex(x => x.id === s.id);
+  if (ix >= 0) j.snags[ix] = s; else j.snags.push(s);
+  if (isNew && s.src) { const a = j.answers[itemKey(s.src.boiler, s.src.section, s.src.item)]; if (a) a.snagId = s.id; }
+  touch(j);
+  if (isNew) { snagDraft = JSON.parse(JSON.stringify(s)); renderSnagSheet(); toast('Snag ' + s.no + ' saved — add photos or close'); }
+  else { closeSnag(); toast('Snag saved'); }
+}
+function deleteSnag() {
+  const j = curJob(), s = snagDraft;
+  if (!confirm('Delete snag ' + s.no + '?')) return;
+  j.snags = j.snags.filter(x => x.id !== s.id);
+  Object.values(j.answers).forEach(a => { if (a.snagId === s.id) delete a.snagId; });
+  touch(j); closeSnag();
+}
+function closeSnag() {
+  const s = snagDraft;
+  // Cancelling a snag raised from an item: item stays ⚠ but unlinked; user can re-tap.
+  document.getElementById('snag-overlay').classList.remove('show'); snagDraft = null;
+  if (s && s._new && s.src) {
+    const a = curJob().answers[itemKey(s.src.boiler, s.src.section, s.src.item)];
+    if (a && !a.snagId) { a.s = ''; touch(curJob()); toast('Snag cancelled — item left unanswered'); }
+  }
+  rerender();
+}
+
+// ---------------------------------------------------------------- ONEDRIVE (MSAL + Graph, from FSO app)
+let msalApp = null, odAccount = null;
+function odCfg() { return APP.settings.oneDrive; }
+function odScopes() { return ['Files.ReadWrite', 'User.Read']; }
+function odIsConnected() { return !!(msalApp && odAccount); }
+function redirectUri() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
+function isStandalonePwa() { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; }
+async function odInit() {
+  const cfg = odCfg();
+  if (!cfg.clientId || typeof msal === 'undefined') return;
+  try {
+    msalApp = new msal.PublicClientApplication({
+      auth: { clientId: cfg.clientId, authority: 'https://login.microsoftonline.com/consumers', redirectUri: redirectUri() },
+      cache: { cacheLocation: 'localStorage' }
+    });
+    await msalApp.initialize();
+    try { const r = await msalApp.handleRedirectPromise(); if (r && r.account) odAccount = r.account; } catch (e) { logAction('redirect: ' + e.message, 'error'); }
+    if (!odAccount) { const a = msalApp.getAllAccounts(); if (a.length) odAccount = a[0]; }
+    if (odAccount) { cfg.connected = true; cfg.account = odAccount.username; saveData(); }
+  } catch (e) { logAction('odInit: ' + (e.message || e), 'error'); }
+}
+async function odToken() {
+  if (!msalApp || !odAccount) throw new Error('Not signed in to OneDrive');
+  try { return (await msalApp.acquireTokenSilent({ scopes: odScopes(), account: odAccount })).accessToken; }
+  catch (e) {
+    if (isStandalonePwa()) { await msalApp.acquireTokenRedirect({ scopes: odScopes(), account: odAccount }); throw new Error('Redirecting to sign-in…'); }
+    return (await msalApp.acquireTokenPopup({ scopes: odScopes(), account: odAccount })).accessToken;
+  }
+}
+async function odSignIn() {
+  if (!odCfg().clientId) { toast('Enter the Client ID first'); return; }
+  if (!msalApp) await odInit();
+  if (!msalApp) { toast('Sign-in library not loaded — check connection'); return; }
+  try {
+    if (isStandalonePwa()) { await msalApp.loginRedirect({ scopes: odScopes() }); return; }
+    const r = await msalApp.loginPopup({ scopes: odScopes() });
+    odAccount = r.account; odCfg().connected = true; odCfg().account = odAccount.username; saveData();
+    toast('Connected to OneDrive'); renderSettings(); syncAll(false);
+  } catch (e) { logAction('signin: ' + (e.message || e), 'error'); toast('Sign-in failed: ' + (e.message || e)); }
+}
+async function odSignOut() {
+  const cfg = odCfg(); cfg.connected = false; cfg.account = null; saveData();
+  try { if (msalApp && odAccount) await msalApp.logoutPopup({ account: odAccount }); } catch (e) {}
+  odAccount = null; renderSettings(); toast('Disconnected from OneDrive');
+}
+async function gFetch(method, path, opts) {
+  opts = opts || {};
+  const h = Object.assign({ Authorization: 'Bearer ' + await odToken() }, opts.headers || {});
+  let body = opts.body;
+  if (opts.json !== undefined) { h['Content-Type'] = 'application/json'; body = JSON.stringify(opts.json); }
+  const res = await fetch(OD_GRAPH + path, { method, headers: h, body });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    let code = ''; try { code = (JSON.parse(txt).error || {}).code || ''; } catch (e) {}
+    const e = new Error('Graph ' + res.status + ' ' + code + ' on ' + method + ' ' + decodeURIComponent(path));
+    e.status = res.status;
+    if (!opts.quiet) logAction(e.message + ' ' + txt.slice(0, 200), 'error');
+    throw e;
+  }
+  if (opts.raw) return new Uint8Array(await res.arrayBuffer());
+  if (res.status === 204) return null;
+  return (res.headers.get('content-type') || '').includes('json') ? res.json() : res.text();
+}
+async function odEnsureChild(parentPath, parentId, name) {
+  const safe = sanitizeName(name, 110);
+  const byPath = parentId ? '/me/drive/items/' + parentId + ':/' + encodeURIComponent(safe) : '/me/drive/root:/' + encodeURIComponent(safe);
+  try { return (await gFetch('GET', byPath, { quiet: true })).id; }
+  catch (e) {
+    const create = parentId ? '/me/drive/items/' + parentId + '/children' : '/me/drive/root/children';
+    try { return (await gFetch('POST', create, { json: { name: safe, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' } })).id; }
+    catch (e2) { return (await gFetch('GET', byPath, { quiet: true })).id; }  // 409 race: it exists
+  }
+}
+async function odRoot() { const c = odCfg(); c.folderId = await odEnsureChild(null, null, c.folderName || 'Commissioning'); return c.folderId; }
+async function odPut(folderId, name, bytes, mime) {
+  const safe = sanitizeName(name, 200);
+  if (bytes.length > 4 * 1024 * 1024) {
+    // > 4 MB: upload session (resumable)
+    const s = await gFetch('POST', '/me/drive/items/' + folderId + ':/' + encodeURIComponent(safe) + ':/createUploadSession', { json: { item: { '@microsoft.graph.conflictBehavior': 'replace' } } });
+    const chunk = 5 * 327680;
+    let last;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      const part = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+      last = await fetch(s.uploadUrl, { method: 'PUT', headers: { 'Content-Range': 'bytes ' + i + '-' + (i + part.length - 1) + '/' + bytes.length }, body: part });
+      if (!last.ok && last.status !== 202) throw new Error('Upload session failed ' + last.status);
+    }
+    return last.json();
+  }
+  return gFetch('PUT', '/me/drive/items/' + folderId + ':/' + encodeURIComponent(safe) + ':/content', { body: bytes, headers: { 'Content-Type': mime } });
+}
+function b64ToBytes(b64) { const bin = atob(b64); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+
+// ---- Sync: job.json + photos per job, rolling backup-latest.json ----
+let syncing = false, syncTimer = null;
+function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => syncAll(false), 8000); }
+async function syncAll(loud) {
+  if (syncing) { if (loud) toast('Sync already running…'); return; }
+  if (!odCfg().clientId || !odIsConnected()) { if (loud) toast('Sign in to OneDrive under Settings first'); return; }
+  if (!isOnline()) { if (loud) toast('Offline — will sync when back in signal'); return; }
+  syncing = true;
+  let n = 0, fail = 0;
+  try {
+    for (const j of Object.values(APP.jobs)) {
+      if (jobSyncState(j).ok) continue;
+      try { await syncJobInner(j); n++; } catch (e) { fail++; logAction('sync ' + jobLabel(j) + ': ' + (e.message || e), 'error'); }
+    }
+    try {
+      const root = await odRoot();
+      await odPut(root, 'backup-latest.json', new TextEncoder().encode(JSON.stringify(APP)), 'application/json');
+    } catch (e) { logAction('backup-latest: ' + e.message, 'error'); }
+    if (loud || n || fail) toast(fail ? '⚠️ ' + fail + ' job(s) failed to sync — see Settings → Bug log' : n ? n + ' job(s) synced to OneDrive' : 'Everything is synced');
+  } finally { syncing = false; if (ctx.screen === 'screen-home' || ctx.screen === 'screen-job') rerender(); }
+}
+async function syncJob(j, loud) {
+  if (!odIsConnected() || !isOnline()) { toast(!odIsConnected() ? 'Sign in to OneDrive under Settings first' : 'Offline — will sync later'); return; }
+  try { toast('Syncing…'); await syncJobInner(j); toast('Synced to OneDrive'); }
+  catch (e) { toast('Sync failed: ' + (e.message || e), 5000); }
+  rerender();
+}
+async function syncJobInner(j) {
+  const root = await odRoot();
+  // Folder id is remembered so renaming the customer later doesn't create a second folder.
+  if (!j.od.folderId) j.od.folderId = await odEnsureChild(null, root, sanitizeName(j.details.contract + ' - ' + j.details.customer, 110));
+  const folders = {};
+  const pending = Object.values(j.photos).filter(p => !p.up);
+  if (pending.length) {
+    const photosRoot = await odEnsureChild(null, j.od.folderId, 'Photos');
+    for (const p of pending) {
+      const b64 = await idbGet(p.id);
+      if (!b64) { p.up = true; p.missing = true; continue; }
+      if (!folders[p.folder]) folders[p.folder] = await odEnsureChild(null, photosRoot, p.folder);
+      await odPut(folders[p.folder], p.name, b64ToBytes(b64), 'image/jpeg');
+      p.up = true; saveData();
+    }
+  }
+  const stamp = new Date().toISOString();
+  await odPut(j.od.folderId, 'job.json', new TextEncoder().encode(JSON.stringify(Object.assign({}, j, { syncedAt: stamp }), null, 1)), 'application/json');
+  j.syncedAt = stamp; if (j.modifiedAt > stamp) j.syncedAt = j.modifiedAt;
+  saveData();
+}
+
+// ---------------------------------------------------------------- SETTINGS
+function renderSettings() {
+  const od = odCfg();
+  const libs = Object.keys(APP.library).filter(k => (APP.library[k] || []).length);
+  document.getElementById('settings-body').innerHTML = `
+  <div class="card"><div class="card-title">Engineer</div>
+    <div class="form-group"><label>Default commissioning engineer</label><input class="form-control" value="${esc(APP.settings.engineer)}" onchange="APP.settings.engineer=this.value.trim();saveData()"></div></div>
+  <div class="card"><div class="card-title">OneDrive</div>
+    <div class="form-group"><label>Azure Client ID</label><input class="form-control mono" id="od-cid" value="${esc(od.clientId)}" placeholder="Same as the FSO app"></div>
+    <div class="form-group"><label>OneDrive folder</label><input class="form-control" id="od-folder" value="${esc(od.folderName)}"></div>
+    <button class="btn btn-secondary" onclick="saveOdCfg()">Save</button>
+    <div class="hint" style="margin-top:10px">Add this redirect URI to the app registration (Azure → App registrations → Authentication → Single-page application):<br><b class="mono" style="word-break:break-all">${esc(redirectUri())}</b></div>
+    <div style="margin-top:12px">${odIsConnected() ? `Signed in as <b>${esc(od.account)}</b><div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="syncAll(true)">Sync now</button><button class="btn btn-secondary btn-sm" onclick="odSignOut()">Sign out</button></div>`
+      : `<button class="btn btn-primary" onclick="odSignIn()">Sign in to OneDrive</button>`}</div></div>
+  <div class="card"><div class="card-title">Backup</div>
+    <div class="hint" style="margin-bottom:10px">Every sync also writes <i>backup-latest.json</i> to the OneDrive folder. A full backup zip includes all photos.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-secondary" onclick="cloudBackup()">Save full backup (zip) to OneDrive</button>
+      <button class="btn btn-secondary" onclick="restoreFromCloudBackup()">Restore from OneDrive backup</button>
+      <button class="btn btn-secondary" onclick="exportBackup()">Download backup file (no photos)</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('backup-input').click()">Restore from backup file</button></div></div>
+  <div class="card"><div class="card-title">Equipment library (added with ＋)</div>
+    ${libs.length ? libs.map(k => APP.library[k].map((o, i) => `<div class="prow" style="grid-template-columns:1fr auto"><div class="pname">${esc(o)} <span class="pinfo">· ${esc(k)}</span></div><button class="tick" onclick="libRemove('${k}',${i})">✕</button></div>`).join('')).join('') : '<div class="hint">Nothing added yet. Use ＋ Add in the plant builder.</div>'}</div>
+  <div class="card"><div class="card-title">App</div>
+    <div class="kv" style="margin-bottom:12px"><div>Version</div><div class="mono">v${APP_VERSION}</div><div>Storage</div><div id="storage-use">…</div></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-secondary" onclick="checkForUpdates(false)">Check for updates</button>
+      <button class="btn btn-secondary" onclick="showBugLog()">Bug log</button></div></div>`;
+  if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => {
+    const el = document.getElementById('storage-use'); if (el) el.textContent = Math.round(e.usage / 1048576) + ' MB used';
+  });
+}
+function saveOdCfg() {
+  const c = odCfg(), cid = document.getElementById('od-cid').value.trim();
+  const changed = cid !== c.clientId;
+  c.clientId = cid; c.folderName = document.getElementById('od-folder').value.trim() || 'Commissioning'; c.folderId = null;
+  saveData();
+  if (changed) { msalApp = null; odAccount = null; odInit().then(renderSettings); }
+  toast('Saved');
+}
+function libRemove(k, i) {
+  if (!confirm('Remove "' + APP.library[k][i] + '" from the list?\n\nJobs that already use it are not changed.')) return;
+  APP.library[k].splice(i, 1); saveData(); renderSettings();
+}
+function showBugLog() {
+  const txt = (window.bugLog || []).slice(-60).reverse().map(e => e.ts.slice(5, 19).replace('T', ' ') + ' ' + (e.type === 'error' ? '❌ ' : '') + e.msg).join('\n');
+  document.getElementById('snag-sheet').innerHTML = `<h2>Bug log</h2><pre style="font-size:.7rem;white-space:pre-wrap;max-height:60dvh;overflow:auto">${esc(txt || 'Empty')}</pre>
+    <div style="display:flex;gap:10px;margin-top:12px"><button class="btn btn-secondary" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.querySelector('#snag-sheet pre').textContent);toast('Copied')">Copy</button>
+    <button class="btn btn-primary" onclick="document.getElementById('snag-overlay').classList.remove('show')">Close</button></div>`;
+  document.getElementById('snag-overlay').classList.add('show');
+}
+
+// ---- Backup & restore (FSO pattern) ----
+function downloadBlob(bytes, name, mime) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: mime })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function exportBackup() {
+  downloadBlob(new TextEncoder().encode(JSON.stringify(APP, null, 1)), 'Commissioning-backup-' + todayStr().replace(/-/g, '') + '.json', 'application/json');
+  toast('Backup downloaded (photos are not included — use the OneDrive zip for those)');
+}
+function importBackup(ev) {
+  const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!d || !d.jobs) { toast('Not a Commissioning App backup'); return; }
+      if (!confirm('Restore backup with ' + Object.keys(d.jobs).length + ' job(s)?\n\nThis REPLACES everything on this device.')) return;
+      APP = d; migrateData(); saveData(); toast('Restored — reloading…'); setTimeout(() => location.reload(), 800);
+    } catch (err) { toast('Restore failed: ' + err.message); }
+  };
+  r.readAsText(f);
+}
+async function cloudBackup() {
+  if (!odIsConnected() || !isOnline()) { toast('Connect to OneDrive first'); return; }
+  try {
+    toast('Building backup…');
+    const files = { 'app-data.json': new TextEncoder().encode(JSON.stringify(APP, null, 1)) };
+    for (const j of Object.values(APP.jobs)) for (const id of Object.keys(j.photos || {})) {
+      const b64 = await idbGet(id); if (b64) files['photos/' + id] = b64ToBytes(b64);
+    }
+    const zip = fflate.zipSync(files, { level: 0 });
+    const name = 'Commissioning-backup-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.zip';
+    const folder = await odEnsureChild(null, await odRoot(), 'Backups');
+    await odPut(folder, name, zip, 'application/zip');
+    toast('Backup saved: ' + name, 4000);
+  } catch (e) { toast('Backup failed: ' + (e.message || e), 5000); }
+}
+async function restoreFromCloudBackup() {
+  if (!odIsConnected() || !isOnline()) { toast('Connect to OneDrive first'); return; }
+  try {
+    const folder = await odEnsureChild(null, await odRoot(), 'Backups');
+    const list = await gFetch('GET', '/me/drive/items/' + folder + '/children?$select=id,name&$top=50');
+    const zips = (list.value || []).filter(f => /\.zip$/i.test(f.name)).sort((a, b) => b.name.localeCompare(a.name));
+    if (!zips.length) { alert('No backups found in ' + odCfg().folderName + ' > Backups.'); return; }
+    const idx = parseInt(prompt('Backups (newest first):\n\n' + zips.slice(0, 10).map((f, i) => (i + 1) + '. ' + f.name).join('\n') + '\n\nType the number to restore:'), 10) - 1;
+    if (!(idx >= 0 && idx < zips.length)) return;
+    if (!confirm('Restore ' + zips[idx].name + '?\n\nEverything on this device will be replaced.')) return;
+    toast('Downloading…');
+    const files = fflate.unzipSync(await gFetch('GET', '/me/drive/items/' + zips[idx].id + '/content', { raw: true }));
+    for (const path of Object.keys(files)) {
+      if (!path.startsWith('photos/')) continue;
+      const arr = files[path]; let bin = '';
+      for (let i = 0; i < arr.length; i += 0x8000) bin += String.fromCharCode.apply(null, arr.subarray(i, i + 0x8000));
+      await idbPut(path.slice(7), btoa(bin));
+    }
+    APP = JSON.parse(new TextDecoder().decode(files['app-data.json'])); migrateData(); saveData();
+    alert('Restored. The app will restart.'); location.reload();
+  } catch (e) { toast('Restore failed: ' + (e.message || e), 5000); }
+}
+
+// ---- Updates (FSO pattern: compare APP_VERSION with the published file) ----
+async function checkForUpdates(silent) {
+  if (!isOnline()) { if (!silent) toast('You are offline'); return; }
+  try {
+    if (swReg) { try { await swReg.update(); } catch (e) {} }
+    const txt = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store' })).text();
+    const m = /const APP_VERSION = '([^']+)'/.exec(txt), live = m && m[1];
+    if (!live) { if (!silent) toast('Could not read the published version'); return; }
+    if (live === APP_VERSION) { if (!silent) toast('Up to date — v' + APP_VERSION); return; }
+    if (confirm('New version available.\n\nInstalled: v' + APP_VERSION + '\nAvailable: v' + live + '\n\nUpdate now? Your jobs are not affected.')) applyUpdateNow();
+  } catch (e) { if (!silent) toast('Update check failed: ' + (e.message || e)); }
+}
+async function applyUpdateNow() {
+  try {
+    if (swReg && swReg.waiting) swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k)));
+  } catch (e) {}
+  setTimeout(() => location.reload(), 400);
+}
+function showUpdateBanner(reg) {
+  if (document.getElementById('update-banner')) return;
+  const b = document.createElement('div');
+  b.id = 'update-banner';
+  b.style.cssText = 'position:fixed;top:calc(64px + env(safe-area-inset-top));left:12px;right:12px;z-index:150;background:#111827;color:#fff;padding:12px 14px;border-radius:12px;display:flex;align-items:center;gap:12px;font-size:.85rem;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+  b.innerHTML = '<span style="flex:1">A new version of the app is ready</span><button style="background:#fff;color:#111827;border:none;border-radius:8px;padding:8px 14px;font-weight:700">Update</button>';
+  b.querySelector('button').onclick = () => { if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' }); b.remove(); };
+  document.body.appendChild(b);
+}
+
+// ---------------------------------------------------------------- STARTUP
+async function startup() {
+  APP = loadData() || initData();
+  migrateData(); saveData();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+  showScreen('screen-home');
+  await odInit();
+  rerender();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      swReg = reg;
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg);
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        nw && nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(reg); });
+      });
+    });
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+  }
+  window.addEventListener('online', () => syncAll(false));
+  setTimeout(() => syncAll(false), 3000);
+  setTimeout(() => checkForUpdates(true), 6000);
+}
+startup();
+</script>
+</body>
+</html>
